@@ -1,0 +1,18 @@
+# secrets
+secrets.h
+.env*
+# device dumps, logs, build output
+*.bin
+*.elf
+*.log
+firmware_dumps/
+logs/
+build/
+# local library copies (see README, "Libraries")
+libraries/
+# OS / editor / python
+.DS_Store
+Thumbs.db
+.vscode/
+.claude/
+__pycache__/
