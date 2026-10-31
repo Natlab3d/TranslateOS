@@ -19,7 +19,7 @@ constexpr uint32_t MIN_SPEECH_MS   = 400;     // shorter than this after trimmin
 constexpr uint32_t TTS_RATE        = 16000;
 
 // ---------------- Gemini ----------------
-static const char* const GEMINI_MODEL = "gemini-2.5-flash-lite";
+static const char* const GEMINI_MODEL = "MODEL NAME HERE";
 constexpr int GEMINI_MAX_TOKENS = 400;
 
 // Translation prompt. Arguments: source, target, source, target.
