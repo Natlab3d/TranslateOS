@@ -788,7 +788,7 @@ static void sw_cb(lv_event_t* e) {
 }
 
 // ---- numeric rows: [-] value [+] ------------------------------------------------
-enum { F_PLAIN, F_TIMEOUT, F_OFFZERO };
+enum { F_PLAIN, F_TIMEOUT, F_OFFZERO, F_TENTH };
 typedef struct {
   SettingId id;
   int16_t lo, hi, step;
@@ -816,6 +816,8 @@ static void nr_show(const NumRow* r) {
     case F_OFFZERO:
       if (v == 0) snprintf(b, sizeof b, "Off"); else snprintf(b, sizeof b, "%d", v);
       break;
+    case F_TENTH:
+      snprintf(b, sizeof b, "%d.%d", v / 10, v % 10); break;
     default: snprintf(b, sizeof b, "%d", v); break;
   }
   set_text(r->lbl, b);
@@ -872,6 +874,7 @@ static lv_obj_t* row_base(lv_obj_t* body, const char* label, const char* sub, lv
 static void step_btn(lv_obj_t* ctl, const char* sym, uintptr_t ud, lv_obj_t** out) {
   lv_obj_t* b = mk_btn(ctl, 52, 40, NULL, NULL, NULL);
   *out = b;
+  lv_obj_set_ext_click_area(b, 3);                     // bigger touch area, same pixels
   lv_obj_add_style(b, &st_card, 0);
   lv_obj_add_event_cb(b, nr_cb, LV_EVENT_SHORT_CLICKED, (void*)ud);
   lv_obj_add_event_cb(b, nr_cb, LV_EVENT_LONG_PRESSED_REPEAT, (void*)ud);
@@ -905,6 +908,7 @@ static void add_sw(lv_obj_t* body, const char* label, const char* sub, SettingId
   lv_obj_t* row = row_base(body, label, sub, &st_c_text, subOut);
   lv_obj_t* sw = lv_switch_create(row);
   lv_obj_set_size(sw, 56, 30);
+  lv_obj_set_ext_click_area(sw, 8);                    // bigger touch area, same pixels
   lv_obj_add_style(sw, &st_sw_on, SEL((uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED));
   if (sw_state(id)) lv_obj_add_state(sw, LV_STATE_CHECKED);
   lv_obj_add_event_cb(sw, sw_cb, LV_EVENT_VALUE_CHANGED, (void*)(intptr_t)id);
@@ -1082,6 +1086,7 @@ static lv_obj_t* build_lang(void) {
   for (int t = 0; t < 2; t++) {
     lv_obj_t* b = mk_btn(s, 150, tabH, cb_lang_tab, (void*)(intptr_t)t, NULL);
     lv_obj_set_pos(b, SB_W + 6 + t * 156, tabY);
+    lv_obj_set_ext_click_area(b, 3);
     lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(b, 18, 0);
     W.tab[t] = b;
@@ -1094,6 +1099,7 @@ static lv_obj_t* build_lang(void) {
 
   lv_obj_t* done = mk_btn(s, 104, tabH, cb_lang_done, NULL, NULL);
   lv_obj_set_pos(done, SCR_W - 104 - 6, tabY);
+  lv_obj_set_ext_click_area(done, 3);
   lv_obj_set_style_bg_color(done, COL(COL_BLUE), 0);
   lv_obj_set_style_bg_opa(done, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(done, 18, 0);
@@ -1153,6 +1159,7 @@ static lv_obj_t* build_talk(void) {
   // language swap pill (strip above the chat)
   lv_obj_t* pill = mk_btn(s, LV_SIZE_CONTENT, 26, cb_swap, NULL, NULL);
   lv_obj_set_pos(pill, chatx + 8, 2);
+  lv_obj_set_ext_click_area(pill, 6);                  // chat is created later and wins any overlap
   lv_obj_add_style(pill, &st_tile, 0);
   lv_obj_set_style_radius(pill, 13, 0);
   lv_obj_set_style_pad_hor(pill, 12, 0);
@@ -1290,7 +1297,7 @@ static lv_obj_t* build_audio(void) {
 static lv_obj_t* build_adv(void) {
   lv_obj_t* body;
   lv_obj_t* s = sub_begin("Advanced", &body);
-  add_num(body, "AI Creativity", SET_AI_CREATIVITY, 0, 10, 1, F_PLAIN, NULL, 0);
+  add_num(body, "AI Creativity", SET_AI_CREATIVITY, 0, 10, 1, F_TENTH, NULL, 0);
   add_num(body, "RMS Threshold", SET_RMS_THRESHOLD, 0, 3000, 100, F_OFFZERO, NULL, 0);
   add_sw(body, "Save History", NULL, SET_SAVE_HISTORY, NULL);
   add_num(body, "Pairs to save", SET_HIST_PAIRS, 1, CHAT_MAX, 1, F_PLAIN, NULL, 0);

@@ -1,6 +1,7 @@
 #include "tos_wifi.h"
 #include "tos_config.h"
 #include "secrets.h"
+#include <esp_sntp.h>
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
@@ -89,12 +90,54 @@ static void portal_start(const char* why) {
   s_wm.startConfigPortal("Translator");
   s_portal = true;
   char t[96]; snprintf(t, sizeof t, "%s - join WiFi 'Translator' to set up", why);
-  ui_post_toast(TOAST_WARN, t, 8000);
+  ui_post_toast(TOAST_WARN, t, 5000);
   Serial.printf("[WIFI] portal started (%s)\n", why);
 }
 
 // ------------------------------------------------------------------ background time sync
+static volatile bool s_sntpDone = false;
+static void sntp_cb(struct timeval*) { s_sntpDone = true; }
+
+// System time and RTC hold LOCAL time with TZ=UTC0 (project convention); utc is converted through TZ_POSIX.
+static void time_set_from_utc(time_t utc, const char* how) {
+  setenv("TZ", TZ_POSIX, 1); tzset();
+  struct tm lt; localtime_r(&utc, &lt);
+  lt.tm_isdst = 0;
+  setenv("TZ", "UTC0", 1); tzset();
+  struct timeval tv = { mktime(&lt), 0 }; settimeofday(&tv, NULL);
+  i2c_rtc_setTime(lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday, lt.tm_hour, lt.tm_min, lt.tm_sec);
+  Serial.printf("[TIME] %s: local %04d-%02d-%02d %02d:%02d, RTC updated\n",
+                how, lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday, lt.tm_hour, lt.tm_min);
+  s_timeSynced = true;
+}
+
 static void time_sync_task(void*) {
+  // 1. NTP: no key needed
+  s_sntpDone = false;
+  sntp_set_time_sync_notification_cb(sntp_cb);
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  for (int i = 0; i < 25 && !s_sntpDone; i++) vTaskDelay(pdMS_TO_TICKS(200));
+  time_t u = time(NULL);
+  esp_sntp_stop();                                       // it would keep rewriting the clock with UTC
+  if (s_sntpDone) { time_set_from_utc(u, "NTP"); vTaskDelete(NULL); return; }
+  // 2. HTTP Date header (works when NTP/UDP is blocked)
+  {
+    HTTPClient h;
+    h.begin("http://connectivitycheck.gstatic.com/generate_204");
+    h.setConnectTimeout(4000); h.setTimeout(4000);
+    const char* keys[] = { "Date" }; h.collectHeaders(keys, 1);
+    int c = h.GET();
+    String d = (c == 204 && h.hasHeader("Date")) ? h.header("Date") : String();
+    h.end();
+    struct tm g = {};
+    if (d.length() && strptime(d.c_str(), "%a, %d %b %Y %H:%M:%S GMT", &g)) {
+      setenv("TZ", "UTC0", 1); tzset();
+      g.tm_isdst = 0;
+      time_set_from_utc(mktime(&g), "HTTP Date"); vTaskDelete(NULL); return;
+    }
+    Serial.printf("[TIME] NTP and HTTP Date failed (%d), trying Geolocation\n", c);
+  }
+  // 3. Geolocation + timeapi (needs a key with Geolocation enabled)
   int n = WiFi.scanComplete() > 0 ? WiFi.scanComplete() : WiFi.scanNetworks(false, true);
   if (n <= 0) { Serial.println("[GEO] no networks, skip time sync"); vTaskDelete(NULL); return; }
   DynamicJsonDocument req(2048);
@@ -109,7 +152,7 @@ static void time_sync_task(void*) {
   http.addHeader("Content-Type", "application/json");
   http.addHeader("x-goog-api-key", GEMINI_API_KEY);            // header, not in the URL
   int code = http.POST(body);
-  if (code != 200) { Serial.printf("[GEO] HTTP %d\n", code); http.end(); vTaskDelete(NULL); return; }
+  if (code != 200) { Serial.printf("[GEO] HTTP %d: %.160s\n", code, http.getString().c_str()); http.end(); vTaskDelete(NULL); return; }
   DynamicJsonDocument g(1024);
   bool bad = deserializeJson(g, http.getString()) || !g["location"].is<JsonObject>();
   http.end();

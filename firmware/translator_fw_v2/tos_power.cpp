@@ -20,9 +20,13 @@ void power_init() {
   esp_io_expander_set_dir(g_io_exp, IO_EXPANDER_PIN_NUM_6, IO_EXPANDER_OUTPUT);
   esp_io_expander_set_level(g_io_exp, IO_EXPANDER_PIN_NUM_6, 1);
   esp_io_expander_set_dir(g_io_exp, IO_EXPANDER_PIN_NUM_7, IO_EXPANDER_OUTPUT);
-  esp_io_expander_set_level(g_io_exp, IO_EXPANDER_PIN_NUM_7, 1);
+  esp_io_expander_set_level(g_io_exp, IO_EXPANDER_PIN_NUM_7, 0);     // amplifier off until playback (saves current, quieter recording)
   adc_bsp_init();
-  Serial.println("[PWR] latch on, PA on");
+  Serial.println("[PWR] latch on, PA off");
+}
+
+void power_set_pa(bool on) {
+  if (g_io_exp) esp_io_expander_set_level(g_io_exp, IO_EXPANDER_PIN_NUM_7, on ? 1 : 0);
 }
 
 static void pwr_task(void*) {

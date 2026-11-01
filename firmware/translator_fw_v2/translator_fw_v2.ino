@@ -177,7 +177,7 @@ void setup() {
     Serial.println("[BOOT] RTC time not valid yet (will be set from the network)");
   }
 
-  if (!audio_init()) ui_post_toast(TOAST_ERROR, "Audio codec failed - restart the device", 10000);
+  if (!audio_init()) ui_post_toast(TOAST_ERROR, "Audio codec failed - restart the device", 5000);
   net_init();
 
   qmi_init();
@@ -236,8 +236,8 @@ void loop() {
     if (batt >= 30) { s_lowStep = 0; s_lowSeen = 0; }
     else if (batt <= 20) {
       if (++s_lowSeen >= 2) {
-        if (batt <= 10 && s_lowStep < 2) { s_lowStep = 2; ui_post_toast(TOAST_ERROR, "Battery very low - charge now", 8000); Serial.printf("[BATT] %d%% critical\n", batt); }
-        else if (batt > 10 && s_lowStep < 1) { s_lowStep = 1; ui_post_toast(TOAST_WARN, "Battery low - 20%", 6000); Serial.printf("[BATT] %d%% low\n", batt); }
+        if (batt <= 10 && s_lowStep < 2) { s_lowStep = 2; ui_post_toast(TOAST_ERROR, "Battery very low - charge now", 5000); Serial.printf("[BATT] %d%% critical\n", batt); }
+        else if (batt > 10 && s_lowStep < 1) { s_lowStep = 1; ui_post_toast(TOAST_WARN, "Battery low - 20%", 5000); Serial.printf("[BATT] %d%% low\n", batt); }
       }
     } else s_lowSeen = 0;
   }

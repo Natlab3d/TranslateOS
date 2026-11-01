@@ -30,7 +30,7 @@ static QueueHandle_t s_jobs = NULL;
 static volatile bool s_busy = false, s_cancel = false;
 
 // ================================================================= errors
-typedef enum { E_OK, E_NOWIFI, E_CONNECT, E_TIMEOUT, E_IO, E_CANCEL, E_HTTP, E_PARSE, E_JUNK } NetErr;
+typedef enum { E_OK, E_NOWIFI, E_CONNECT, E_TIMEOUT, E_IO, E_CANCEL, E_HTTP, E_PARSE, E_JUNK, E_CONFIG } NetErr;
 typedef struct { NetErr err; int code; char msg[96]; } NetResult;
 
 static bool retryable(const NetResult& r) {
@@ -42,18 +42,20 @@ static void toast_for(const NetResult& r, const char* what) {
   switch (r.err) {
     case E_NOWIFI:  ui_post_toast(TOAST_ERROR, "No WiFi - check hotspot / WiFi", 5000); return;
     case E_CONNECT: ui_post_toast(TOAST_ERROR, "No internet connection", 5000); return;
-    case E_TIMEOUT: ui_post_toast(TOAST_ERROR, "Network too slow - try a shorter phrase", 6000); return;
+    case E_TIMEOUT: ui_post_toast(TOAST_ERROR, "Network too slow - try a shorter phrase", 5000); return;
     case E_IO:      ui_post_toast(TOAST_ERROR, "Connection dropped - try again", 5000); return;
     case E_CANCEL:  ui_post_toast(TOAST_INFO,  "Cancelled", 1500); return;
     case E_PARSE:   ui_post_toast(TOAST_ERROR, "Bad reply from server - try again", 5000); return;
     case E_JUNK:    ui_post_toast(TOAST_INFO,  "Didn't understand - speak again", 3000); return;
+    case E_CONFIG:  ui_post_toast(TOAST_ERROR, "Set GEMINI_MODEL in secrets.h", 5000); return;
     case E_HTTP:
       if (r.code == 402)                    snprintf(t, sizeof t, "Gemini credit used up - top up in AI Studio");
       else if (r.code == 401 || r.code == 403) snprintf(t, sizeof t, "API key rejected (%d) - check the key", r.code);
+      else if (r.code == 404)               snprintf(t, sizeof t, "Model not found - check GEMINI_MODEL");
       else if (r.code == 429)               snprintf(t, sizeof t, "Too many requests - wait a moment");
       else if (r.code >= 500)               snprintf(t, sizeof t, "Google %s busy (%d) - try again", what, r.code);
       else                                  snprintf(t, sizeof t, "%s error %d: %.60s", what, r.code, r.msg);
-      ui_post_toast(TOAST_ERROR, t, 7000); return;
+      ui_post_toast(TOAST_ERROR, t, 5000); return;
     default: return;
   }
 }
@@ -288,6 +290,7 @@ static void parse_answer(const char* text, int dst, char* heard, char* trans) {
 // ================================================================= Gemini
 static NetResult gemini_translate(const uint8_t* wav, size_t len, int src, int dst, char* heard, char* trans) {
   NetResult res = { E_OK, 0, "" };
+  if (!GEMINI_MODEL[0] || !strcmp(GEMINI_MODEL, "MODEL NAME HERE")) { res.err = E_CONFIG; return res; }
   // ---- build body once (reused by the retry)
   static char prompt[1600], esc[2400];
   snprintf(prompt, sizeof prompt, SYSTEM_PROMPT_TRANSLATION, LANG_NAMES[src], LANG_NAMES[dst], LANG_NAMES[src], LANG_NAMES[dst]);
@@ -296,8 +299,10 @@ static NetResult gemini_translate(const uint8_t* wav, size_t len, int src, int d
                       "\"contents\":[{\"role\":\"user\",\"parts\":[{\"inline_data\":{\"mime_type\":\"audio/wav\",\"data\":\"", esc);
   if (n + ((len + 2) / 3) * 4 + 256 > s_reqCap) { res.err = E_PARSE; snprintf(res.msg, sizeof res.msg, "request too big"); return res; }
   n += b64_encode(wav, len, s_req + n);
-  n += snprintf(s_req + n, s_reqCap - n, "\"}}]}],\"generationConfig\":{\"maxOutputTokens\":%d,\"temperature\":%.2f,"
-                "\"thinkingConfig\":{\"thinkingBudget\":0}}}", GEMINI_MAX_TOKENS, settings_temperature());
+  // thinkingConfig is only accepted by the 2.5 family; other models answer HTTP 400.
+  const char* thinkOff = strstr(GEMINI_MODEL, "2.5") ? ",\"thinkingConfig\":{\"thinkingBudget\":0}" : "";
+  n += snprintf(s_req + n, s_reqCap - n, "\"}}]}],\"generationConfig\":{\"maxOutputTokens\":%d,\"temperature\":%.2f%s}}",
+                GEMINI_MAX_TOKENS, settings_temperature(), thinkOff);
   char path[128];
   snprintf(path, sizeof path, "/v1beta/models/%s:generateContent", GEMINI_MODEL);
 

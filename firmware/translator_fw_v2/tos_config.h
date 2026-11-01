@@ -18,8 +18,14 @@ constexpr uint32_t MIN_SPEECH_MS   = 400;     // shorter than this after trimmin
 // TTS is requested at 16 kHz (1/3 less download than 24 kHz) and upsampled for the codec.
 constexpr uint32_t TTS_RATE        = 16000;
 
-// ---------------- Gemini ----------------
-static const char* const GEMINI_MODEL = "MODEL NAME HERE";
+// ---------------- AI model ----------------
+// Gemini is the example the firmware is written and tested with. The model is only a string: use any model your key
+// can reach (models get retired, check your provider's list). A different provider needs its own request code in
+// tos_net.cpp and is not included yet. See README, "Choosing your AI".
+// GEMINI_MODEL lives in secrets.h next to the key.
+
+// Time zone for the clock (POSIX string, handles summer time). Default: Europe/London. Change it for your zone.
+static const char* const TZ_POSIX = "GMT0BST,M3.5.0/1,M10.5.0";
 constexpr int GEMINI_MAX_TOKENS = 400;
 
 // Translation prompt. Arguments: source, target, source, target.
@@ -51,6 +57,7 @@ constexpr uint32_t NET_SLOW_NOTICE_MS     = 6000;     // show "slow connection" 
 constexpr uint8_t  NET_RETRIES            = 1;        // network errors / 5xx only, never 4xx
 
 // ---------------- WiFi ----------------
+static const char* const WIFI_AP_NAME = "TranslateOS";
 constexpr uint32_t WIFI_PORTAL_TIMEOUT_S  = 180;      // only when the user asked for setup
 constexpr uint8_t  WIFI_MAX_KNOWN         = 3;        // remembered networks (home + phone hotspot ...)
 #endif

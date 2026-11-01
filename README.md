@@ -11,8 +11,9 @@ Not yet verified on hardware: recording, translation, TTS playback, 3G use.
 1. Install `arduino-cli` and the ESP32 core **3.3.0**: `arduino-cli core install esp32:esp32@3.3.0`
    (additional URL `https://espressif.github.io/arduino-esp32/package_esp32_index.json`).
 2. Install the libraries (see **Libraries** below).
-3. In `firmware/translator_fw_v2/` copy `secrets.h.example` to `secrets.h` and put your own Gemini key
-   (the key's project needs Gemini, Cloud Text-to-Speech and Geolocation enabled and must have credit).
+3. In `firmware/translator_fw_v2/` copy `secrets.h.example` to `secrets.h` and set your own Gemini key and your model name
+   (the key's project needs Gemini and Cloud Text-to-Speech enabled and must have credit; Geolocation is only an optional
+   fallback for the clock). See **Choosing your AI** for the model. Set `TZ_POSIX` in `tos_config.h` to your time zone.
    **Never commit `secrets.h`.**
 4. Compile (from this folder):
 
@@ -38,6 +39,24 @@ The ESP32 core also provides `WiFi`, `WiFiClientSecure`, `HTTPClient`, `ArduinoO
 extra fonts, TinyTTF for the large clock):
 1. Copy `lv_conf.h` into your Arduino `libraries/` folder, next to (not inside) the `lvgl` folder.
 2. Copy `lvgl_assert_hook.h` into `libraries/lvgl/src/`.
+
+## Choosing your AI
+The firmware uses Gemini as its example: it accepts the recorded audio directly, so one call returns the transcription
+and the translation. The model name is in `firmware/translator_fw_v2/secrets.h` and the rest is in `tos_config.h`:
+- `GEMINI_MODEL` (in `secrets.h`): the model name. `secrets.h.example` ships the placeholder `MODEL NAME HERE`, so
+  **you must set it** before you build (the model used in testing was `gemini-2.5-flash-lite`). It is only a string, so use
+  any Gemini model your key can reach. Google retires models from time to time, so check the current list for your key.
+  If it is unset the device shows "Set GEMINI_MODEL in secrets.h"; a wrong name shows "Model not found".
+  The `thinkingConfig` option is sent only for 2.5 models, because other models reject it.
+- `SYSTEM_PROMPT_TRANSLATION`: the translation prompt. A different model may follow it differently, so test it.
+- `TZ_POSIX`: your time zone for the clock (standard POSIX string, handles summer time). The clock is set from NTP, then
+  from an HTTP Date header, then from Google Geolocation as a last resort, so no key is needed for the time.
+- `TTS_LANG` / `TTS_VOICE`: the spoken voice for each of the 10 languages.
+- `NET_*` and `MAX_RECORD_MS`: network timeouts, retry count and the longest recording.
+
+Using another provider (OpenAI, Anthropic, a local server, ...) is not supported yet. Each provider has its own request
+and reply format, and a provider without audio input needs a separate speech to text step first. That means a small
+adapter in `tos_net.cpp` ("audio in, text out"). Contributions are welcome.
 
 ## First run
 Switch on. If no WiFi is saved, join the network **Translator** from a phone or laptop and pick your WiFi

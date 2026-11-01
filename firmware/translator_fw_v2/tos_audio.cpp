@@ -1,5 +1,6 @@
 #include "tos_audio.h"
 #include "tos_config.h"
+#include "tos_power.h"
 #include "app_api.h"
 #include <Arduino.h>
 #include <math.h>
@@ -48,10 +49,12 @@ static inline int16_t sat16(int32_t v) { return v > 32767 ? 32767 : (v < -32768 
 // Convert the raw stereo 24 kHz capture into trimmed 16 kHz mono. Returns sample count.
 static size_t process_recording(size_t frames, RecResult* r) {
   // 1. per-channel RMS -> pick the channel that carries the voice (measured, not assumed)
-  double sl = 0, sr = 0;
-  for (size_t i = 0; i < frames; i++) { int32_t a = s_raw[2*i], b = s_raw[2*i+1]; sl += (double)a*a; sr += (double)b*b; }
-  r->rmsL = frames ? (int)sqrt(sl / frames) : 0;
-  r->rmsR = frames ? (int)sqrt(sr / frames) : 0;
+  // (mean removed first: a DC bias on one microphone must not decide the channel)
+  double sl = 0, sr = 0, ml = 0, mr = 0;
+  for (size_t i = 0; i < frames; i++) { int32_t a = s_raw[2*i], b = s_raw[2*i+1]; sl += (double)a*a; sr += (double)b*b; ml += a; mr += b; }
+  if (frames) { ml /= frames; mr /= frames; }
+  r->rmsL = frames ? (int)sqrt(fmax(0.0, sl / frames - ml * ml)) : 0;
+  r->rmsR = frames ? (int)sqrt(fmax(0.0, sr / frames - mr * mr)) : 0;
   if (r->rmsL > r->rmsR * 3 / 2) r->chUsed = 0;
   else if (r->rmsR > r->rmsL * 3 / 2) r->chUsed = 1;
   else r->chUsed = 2;
@@ -198,6 +201,7 @@ bool audio_rec_take_result(RecResult* out) {
 bool audio_play_begin() {
   if (s_recActive || !s_codecMux) return false;
   if (xSemaphoreTake(s_codecMux, pdMS_TO_TICKS(500)) != pdTRUE) return false;
+  power_set_pa(true); vTaskDelay(pdMS_TO_TICKS(40));       // let the amplifier settle before the first samples
   s_playCancel = false; s_playActive = true; s_playPrev = 0; s_playPhase = 0;
   return true;
 }
@@ -233,6 +237,7 @@ void audio_play_end() {
   if (!s_playActive) return;
   static int16_t zeros[2 * 480] = {0};             // 20 ms of silence flushes the DMA tail
   if (!s_playCancel) esp_codec_dev_write(s_play, zeros, sizeof(zeros));
+  vTaskDelay(pdMS_TO_TICKS(30)); power_set_pa(false);
   s_playActive = false;
   xSemaphoreGive(s_codecMux);
 }
